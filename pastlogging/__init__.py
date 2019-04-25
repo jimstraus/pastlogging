@@ -33,16 +33,22 @@ keep a long running program from using up all of memory.
 
 Pretty much all the documentation for the standard Python logging applies.  Beyond
 the addition of:
-  setThreshold(level)
+  setMinLevel(level)
   setMax(max)
   reset()
-the only change in meaning is setLevel(level) affects what is stored, not what
-emitted.  If you want to change what is immediately emitted, use setThreshold().
+the only change in meaning is setMinLevel(level) affects what is stored, not what
+emitted.
 
 setMax() takes the maximum number of entries to store.  If the number is -1, all
 entries are stored (no maximum).
 
 To use, simply 'import pastlogging as logging' and log away!
+
+If you used to use 'import logging' and then 'logging.warning()' change to:
+'import pastlogging' and 'logging = getLogger()'.
+
+If you used 'import logging' and 'logger = logging.getLogger()' and 'logger.warning()'
+just change the import to 'import pastlogging as logging'.
 '''
 
 import logging, sys, warnings
@@ -50,7 +56,7 @@ import logging, sys, warnings
 __all__ = []
 __all__ += logging.__all__
 
-CRITICAL = 50
+CRITICAL = 1000
 FATAL = CRITICAL
 ERROR = 40
 WARNING = 30
@@ -59,13 +65,60 @@ INFO = 20
 DEBUG = 10
 NOTSET = 0
 
+BASIC_FORMAT = "%(levelname)s:%(name)s:%(message)s"
+
+class BufferingFormatter(logging.BufferingFormatter):
+    pass
+
+class FileHandler(logging.FileHandler):
+    pass
+
+class Filter(logging.Filter):
+    pass
+
+class Formatter(logging.Formatter):
+    pass
+
+class Handler(logging.Handler):
+    pass
+
+class LogRecord(logging.LogRecord):
+    pass
+
+class Logger(logging.Logger):
+    pass
+
+class LoggerAdapter(logging.LoggerAdapter):
+    pass
+
+class StreamHandler(logging.StreamHandler):
+    pass
+
+def addLevelName(level, levelName):
+    logging.addLevelName(level, levelName)
+
+def captureWarnings(capture):
+    logging.captureWarnings(capture)
+
+def getLevelName(level):
+    logging.getLevelName(level)
+
+def getLoggerClass():
+    logging.getLoggerClass()
+
+def makeLogRecord(dict):
+    logging.makeLogRecord(dict)
+
+def setLoggerClass(klass):
+    logging.setLoggerClass(klass)
+
 class PastLogger(logging.Logger):
 
-    def __init__(self, name, level=logging.NOTSET, threshold=logging.NOTSET):
-        logging.Logger.__init__(self, name, level)
+    def __init__(self, name, threshold=logging.NOTSET, minlevel=logging.NOTSET):
+        logging.Logger.__init__(self, name, minlevel)
         self._past = []
-        self._threshold = threshold
-        self._pastmax = -1
+        self.threshold = threshold
+        self.pastmax = 1000
 
     def _log(self, level, msg, args, exc_info=None, extra=None):
         """
@@ -86,27 +139,31 @@ class PastLogger(logging.Logger):
             if not isinstance(exc_info, tuple):
                 exc_info = sys.exc_info()
         record = self.makeRecord(self.name, level, fn, lno, msg, args, exc_info, func, extra)
-        if level < self._threshold:
+        if level < self.threshold:
             self._past.append(record)
-            if self._pastmax >= 0 and self._pastmax < len(self._past):
-              del self._past[0:len(self._past) - self._pastmax]
+            if self.pastmax >= 0 and self.pastmax < len(self._past):
+              del self._past[0:len(self._past) - self.pastmax]
         else:
             for rec in self._past:
                 self.handle(rec)
             self._past = []
             self.handle(record)
 
-    def setThreshold(self, level):
+    def setLevel(self, level):
+        """
+        Set the logging level of this logger.
+        """
+        self.threshold = logging._checkLevel(level)
+
+    def setMinLevel(self, level):
         """
         Set the logging threshold of this handler.
         """
-        self._threshold = logging._checkLevel(level)
-        if self._threshold < self.level:
-            self.level = _checkLevel(level)
+        self.level = logging._checkLevel(level)
 
     def setMax(self, max):
         if isinstance(max, (int, long)):
-            self._pastmax = max
+            self.pastmax = max
 
     def reset(self):
         """
@@ -121,15 +178,15 @@ class PastRootLogger(PastLogger):
     it must have a logging level and there is only one instance of it in
     the hierarchy.
     """
-    def __init__(self, level, threshold):
+    def __init__(self, threshold, minlevel):
         """
         Initialize the logger with the name "root".
         """
-        PastLogger.__init__(self, "root", level, threshold)
+        PastLogger.__init__(self, "root", threshold, minlevel)
 
 _loggerClass = PastLogger
 
-logging.root = PastRootLogger(logging.DEBUG, logging.WARNING)
+logging.root = PastRootLogger(logging.WARNING, logging.DEBUG)
 logging.Logger.root = logging.root
 logging.Logger.manager = logging.Manager(logging.Logger.root)
 
@@ -212,10 +269,9 @@ def disable(level):
     logging.root.manager.disable = level
 
 def basicConfig(**kwargs):
-  logging.root.setThreshold(kwargs.get("threshold", logging.WARNING))
-  logging.root.setMax(kwargs.get("max", -1))
+  logging.root.setMinLevel(kwargs.get("minlevel", logging.NOTSET))
+  logging.root.setMax(kwargs.get("max", 1000))
   logging.basicConfig(**kwargs)
-
 
 # Warnings integration
 
