@@ -1,27 +1,32 @@
 import sys
-import StringIO
 import pytest
+import io
 
 sys.path.append('..')     # to find pastlogging for import
 
+PY3 = sys.version_info[0] == 3
+
 output = None
-logging = None
+plogging = None
 def setup():
-    global output, logging
+    global output, plogging
     if output:
         output.close()
     if sys.modules.get("pastlogging"):
         del sys.modules["pastlogging"]
-        del logging
+        del plogging
     import pastlogging
-    logging = pastlogging
-    logging.basicConfig()
+    plogging = pastlogging
+    plogging.basicConfig()
 
 def addHandler(logger):
-    global output
-    output = StringIO.StringIO()
-    handler = logging.StreamHandler(output)
-    formatter = logging.Formatter(logging.BASIC_FORMAT)
+    global plogging, output
+    if PY3:
+        output = io.StringIO()
+    else:
+        output = io.BytesIO()
+    handler = plogging.StreamHandler(output)
+    formatter = plogging.Formatter(plogging.BASIC_FORMAT)
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
@@ -30,7 +35,7 @@ def addHandler(logger):
 def test_basic_error():
     """Logging an error outputs an error"""
     setup()
-    logger = logging.getLogger()
+    logger = plogging.getLogger()
     addHandler(logger)
     logger.error("an error")
     result = output.getvalue()
@@ -40,16 +45,17 @@ def test_basic_error():
 def test_basic_error_root():
     """Logging an error outputs an error"""
     setup()
-    logger = logging.getLogger()
+    logger = plogging.getLogger()
     addHandler(logger)
-    logging.error("an error")
+    plogging.error("an error")
     result = output.getvalue()
     assert output.getvalue() == "ERROR:root:an error\n"
+    del logger
 
 def test_basic_error_named():
     """Logging an error outputs an error"""
     setup()
-    logger = logging.getLogger("abc")
+    logger = plogging.getLogger("abc")
     addHandler(logger)
     logger.error("an error")
     result = output.getvalue()
@@ -59,7 +65,7 @@ def test_basic_error_named():
 def test_info_does_not_log():
     """Logging an info doesn't display'"""
     setup()
-    logger = logging.getLogger()
+    logger = plogging.getLogger()
     addHandler(logger)
     logger.info("an info")
     result = output.getvalue()
@@ -68,7 +74,7 @@ def test_info_does_not_log():
 
 def test_info_and_error_log():
     setup()
-    logger = logging.getLogger()
+    logger = plogging.getLogger()
     addHandler(logger)
     logger.info("an info")
     logger.error("an error")
@@ -78,7 +84,7 @@ def test_info_and_error_log():
 
 def test_reset():
     setup()
-    logger = logging.getLogger()
+    logger = plogging.getLogger()
     addHandler(logger)
     logger.info("an info")
     logger.reset()
@@ -90,9 +96,9 @@ def test_reset():
 
 def test_setlevel():
     setup()
-    logger = logging.getLogger()
+    logger = plogging.getLogger()
     addHandler(logger)
-    logger.setLevel(logging.INFO)
+    logger.setLevel(plogging.INFO)
     logger.info("an info")
     result = output.getvalue()
     assert result == "INFO:root:an info\n"
@@ -100,7 +106,7 @@ def test_setlevel():
 
 def test_setmax():
     setup()
-    logger = logging.getLogger()
+    logger = plogging.getLogger()
     addHandler(logger)
     logger.setMax(2)
     logger.info("info 1")
@@ -114,9 +120,9 @@ def test_setmax():
 
 def test_setminlevel():
     setup()
-    logger = logging.getLogger()
+    logger = plogging.getLogger()
     addHandler(logger)
-    logger.setMinLevel(logging.INFO)
+    logger.setMinLevel(plogging.INFO)
     logger.debug("a debug")
     logger.info("an info")
     logger.error("an error")
@@ -126,12 +132,12 @@ def test_setminlevel():
 
 def test_multiple_names():
     setup()
-    logger = logging.getLogger()
+    logger = plogging.getLogger()
     addHandler(logger)
-    loggera = logging.getLogger("a")
-    loggerab = logging.getLogger("a.b")
-    loggera.setLevel(logging.WARNING)
-    loggerab.setLevel(logging.WARNING)
+    loggera = plogging.getLogger("a")
+    loggerab = plogging.getLogger("a.b")
+    loggera.setLevel(plogging.WARNING)
+    loggerab.setLevel(plogging.WARNING)
     logger.debug("root debug")
     loggera.debug("a debug")
     loggerab.debug("ab debug")
@@ -142,3 +148,31 @@ def test_multiple_names():
     del loggera
     del loggerab
 
+def test_multiple_names():
+    setup()
+    logger = plogging.getLogger()
+    addHandler(logger)
+    loggera = plogging.getLogger("a")
+    loggerab = plogging.getLogger("a.b")
+    loggera.setLevel(plogging.WARNING)
+    loggerab.setLevel(plogging.WARNING)
+    logger.debug("root debug")
+    loggera.debug("a debug")
+    loggerab.debug("ab debug")
+    loggerab.error("ab error")
+    result = output.getvalue()
+    assert result == "DEBUG:root:root debug\nDEBUG:a:a debug\nDEBUG:a.b:ab debug\nERROR:a.b:ab error\n"
+    del logger
+    del loggera
+    del loggerab
+
+def test_using_logging_directly():
+    setup()
+    import logging
+    logger = plogging.getLogger()
+    addHandler(logger)
+    logger.error("an error")
+    logging.error("logging error")
+    result = output.getvalue()
+    assert output.getvalue() == "ERROR:root:an error\nERROR:root:logging error\n"
+    del logger

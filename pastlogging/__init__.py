@@ -17,6 +17,7 @@
 # FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 # AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
@@ -57,7 +58,7 @@ If you used 'import logging' and 'logger = logging.getLogger()' and 'logger.warn
 just change the import to 'import pastlogging as logging'.
 '''
 
-import os, sys, warnings
+import os, sys, warnings, inspect
 from logging import *
 import logging
 
@@ -68,7 +69,7 @@ class PastManager(logging.Manager):
         self.pastmax = 1000
 
     def setMax(self, max):
-        if isinstance(max, (int, long)):
+        if isinstance(max, int):
             self.pastmax = max
 
     def addLogRecord(self, record):
@@ -82,30 +83,49 @@ class PastManager(logging.Manager):
     def resetLogRecords(self):
         self._past = []
 
+_newlogging = False
+if hasattr(inspect, "signature"):
+    if len(inspect.signature(logging.root.findCaller).parameters) > 1:
+        _newlogging = True
+
 class PastLogger(Logger):
     def __init__(self, name, threshold=NOTSET, minlevel=NOTSET):
         Logger.__init__(self, name, minlevel)
         self.threshold = threshold
 
-    def _log(self, level, msg, args, exc_info=None, extra=None):
+    def _log(self, level, msg, args, exc_info=None, extra=None, stack_info=False):
         """
         Low-level logging routine which creates a LogRecord and then calls
         all the handlers of this logger to handle the record.
         """
+
+        sinfo = None
         if logging._srcfile:
             #IronPython doesn't track Python frames, so findCaller raises an
             #exception on some versions of IronPython. We trap it here so that
             #IronPython can use logging.
             try:
-                fn, lno, func = self.findCaller()
+                if _newlogging:
+                    fn, lno, func, sinfo = self.findCaller(stack_info)
+                else:
+                    fn, lno, func = self.findCaller()
             except ValueError:
                 fn, lno, func = "(unknown file)", 0, "(unknown function)"
         else:
             fn, lno, func = "(unknown file)", 0, "(unknown function)"
-        if exc_info:
-            if not isinstance(exc_info, tuple):
-                exc_info = sys.exc_info()
-        record = self.makeRecord(self.name, level, fn, lno, msg, args, exc_info, func, extra)
+        if _newlogging:
+            if exc_info:
+                if isinstance(exc_info, BaseException):
+                    exc_info = (type(exc_info), exc_info, exc_info.__traceback__)
+                elif not isinstance(exc_info, tuple):
+                    exc_info = sys.exc_info()
+            record = self.makeRecord(self.name, level, fn, lno, msg, args,
+                                     exc_info, func, extra, sinfo)
+        else:
+            if exc_info:
+                if not isinstance(exc_info, tuple):
+                    exc_info = sys.exc_info()
+            record = self.makeRecord(self.name, level, fn, lno, msg, args, exc_info, func, extra)
         if level < self.threshold:
             self.manager.addLogRecord(record)
         else:
@@ -119,12 +139,18 @@ class PastLogger(Logger):
         Set the logging level of this logger.
         """
         self.threshold = logging._checkLevel(level)
+        if self.threshold < self.level:
+            self.level = self.threshold
+        if hasattr(self.manager, "_clear_cache"):
+            self.manager._clear_cache()
 
     def setMinLevel(self, level):
         """
         Set the logging threshold of this handler.
         """
         self.level = logging._checkLevel(level)
+        if hasattr(self.manager, "_clear_cache"):
+            self.manager._clear_cache()
 
     def setMax(self, max):
         self.manager.setMax(max)
@@ -202,22 +228,47 @@ def basicConfig(**kwargs):
     logging._acquireLock()
     try:
         if len(logging.root.handlers) == 0:
-            filename = kwargs.get("filename")
-            if filename:
-                mode = kwargs.get("filemode", 'a')
-                hdlr = FileHandler(filename, mode)
+            handlers = kwargs.pop("handlers", None)
+            if handlers is None:
+                if "stream" in kwargs and "filename" in kwargs:
+                    raise ValueError("'stream' and 'filename' should not be "
+                                     "specified together")
             else:
-                stream = kwargs.get("stream")
-                hdlr = StreamHandler(stream)
-            fs = kwargs.get("format", BASIC_FORMAT)
-            dfs = kwargs.get("datefmt", None)
-            fmt = Formatter(fs, dfs)
-            hdlr.setFormatter(fmt)
-            logging.root.addHandler(hdlr)
+                if "stream" in kwargs or "filename" in kwargs:
+                    raise ValueError("'stream' or 'filename' should not be "
+                                     "specified together with 'handlers'")
+            if handlers is None:
+                filename = kwargs.pop("filename", None)
+                mode = kwargs.pop("filemode", 'a')
+                if filename:
+                    h = FileHandler(filename, mode)
+                else:
+                    stream = kwargs.pop("stream", None)
+                    h = StreamHandler(stream)
+                handlers = [h]
+            if hasattr(logging, "_STYLES"):
+                dfs = kwargs.pop("datefmt", None)
+                style = kwargs.pop("style", '%')
+                if style not in logging._STYLES:
+                    raise ValueError('Style must be one of: %s' % ','.join(
+                                     logging._STYLES.keys()))
+                fs = kwargs.pop("format", logging._STYLES [style][1])
+                fmt = Formatter(fs, dfs, style)
+            else:
+                fs = kwargs.get("format", BASIC_FORMAT)
+                dfs = kwargs.get("datefmt", None)
+                fmt = Formatter(fs, dfs)
+            for h in handlers:
+                if h.formatter is None:
+                    h.setFormatter(fmt)
+                logging.root.addHandler(h)
             level = kwargs.get("level")
             if level is not None:
                 logging.root.setLevel(level)
             logging.root.setMinLevel(kwargs.get("minlevel", NOTSET))
             logging.root.setMax(kwargs.get("max", 1000))
+            if kwargs:
+                keys = ', '.join(kwargs.keys())
+                raise ValueError('Unrecognised argument(s): %s' % keys)
     finally:
         logging._releaseLock()
