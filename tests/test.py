@@ -1,96 +1,144 @@
 import sys
 import StringIO
+import pytest
 
-sys.path.append('..')
-import pastlogging as logging
-
-logging.basicConfig()
+sys.path.append('..')     # to find pastlogging for import
 
 output = None
-handler = None
-logger = logging.getLogger()
-
+logging = None
 def setup():
-    global handler, output, logger
+    global output, logging
+    if output:
+        output.close()
+    if sys.modules.get("pastlogging"):
+        del sys.modules["pastlogging"]
+        del logging
+    import pastlogging
+    logging = pastlogging
+    logging.basicConfig()
+
+def addHandler(logger):
+    global output
     output = StringIO.StringIO()
     handler = logging.StreamHandler(output)
     formatter = logging.Formatter(logging.BASIC_FORMAT)
     handler.setFormatter(formatter)
     logger.addHandler(handler)
-    logger.reset()
-    logger.setLevel(logging.WARN)
-    logger.setMinLevel(logging.NOTSET)
-    logger.setMax(1000)
 
-def cleanup():
-    global handler, output
-    logger.removeHandler(handler)
-    output.close()
+###################################
 
-
-def test1():
+def test_basic_error():
+    """Logging an error outputs an error"""
     setup()
+    logger = logging.getLogger()
+    addHandler(logger)
     logger.error("an error")
-    result = output.getvalue() == "ERROR:root:an error\n"
-    cleanup()
-    return result
+    result = output.getvalue()
+    assert output.getvalue() == "ERROR:root:an error\n"
+    del logger
 
-def test2():
+def test_basic_error_root():
+    """Logging an error outputs an error"""
     setup()
+    logger = logging.getLogger()
+    addHandler(logger)
+    logging.error("an error")
+    result = output.getvalue()
+    assert output.getvalue() == "ERROR:root:an error\n"
+
+def test_basic_error_named():
+    """Logging an error outputs an error"""
+    setup()
+    logger = logging.getLogger("abc")
+    addHandler(logger)
+    logger.error("an error")
+    result = output.getvalue()
+    assert output.getvalue() == "ERROR:abc:an error\n"
+    del logger
+
+def test_info_does_not_log():
+    """Logging an info doesn't display'"""
+    setup()
+    logger = logging.getLogger()
+    addHandler(logger)
     logger.info("an info")
-    result = output.getvalue() == ""
-    cleanup()
-    return result
+    result = output.getvalue()
+    assert result == ""
+    del logger
 
-def test3():
+def test_info_and_error_log():
     setup()
+    logger = logging.getLogger()
+    addHandler(logger)
     logger.info("an info")
     logger.error("an error")
-    result = output.getvalue() == "INFO:root:an info\nERROR:root:an error\n"
-    cleanup()
-    return result
+    result = output.getvalue()
+    assert result == "INFO:root:an info\nERROR:root:an error\n"
+    del logger
 
-def test4():
+def test_reset():
     setup()
+    logger = logging.getLogger()
+    addHandler(logger)
     logger.info("an info")
     logger.reset()
     logger.debug("a debug")
     logger.error("an error")
-    result = output.getvalue() == "DEBUG:root:a debug\nERROR:root:an error\n"
-    cleanup()
-    return result
+    result = output.getvalue()
+    assert result == "DEBUG:root:a debug\nERROR:root:an error\n"
+    del logger
 
-def test5():
+def test_setlevel():
     setup()
+    logger = logging.getLogger()
+    addHandler(logger)
     logger.setLevel(logging.INFO)
     logger.info("an info")
-    result = output.getvalue() == "INFO:root:an info\n"
-    cleanup()
-    return result
+    result = output.getvalue()
+    assert result == "INFO:root:an info\n"
+    del logger
 
-def test6():
+def test_setmax():
     setup()
+    logger = logging.getLogger()
+    addHandler(logger)
     logger.setMax(2)
     logger.info("info 1")
     logger.info("info 2")
     logger.info("info 3")
     logger.info("info 4")
     logger.error("an error")
-    result = output.getvalue() == "INFO:root:info 3\nINFO:root:info 4\nERROR:root:an error\n"
-    cleanup()
-    return result
+    result = output.getvalue()
+    assert result == "INFO:root:info 3\nINFO:root:info 4\nERROR:root:an error\n"
+    del logger
 
+def test_setminlevel():
+    setup()
+    logger = logging.getLogger()
+    addHandler(logger)
+    logger.setMinLevel(logging.INFO)
+    logger.debug("a debug")
+    logger.info("an info")
+    logger.error("an error")
+    result = output.getvalue()
+    assert result == "INFO:root:an info\nERROR:root:an error\n"
+    del logger
 
-if __name__ == '__main__':
-    if not test1():
-        print "test1 failed"
-    if not test2():
-        print "test2 failed"
-    if not test3():
-        print "test3 failed"
-    if not test4():
-        print "test4 failed"
-    if not test5():
-        print "test5 failed"
-    if not test6():
-        print "test6 failed"
+def test_multiple_names():
+    setup()
+    logger = logging.getLogger()
+    addHandler(logger)
+    loggera = logging.getLogger("a")
+    loggerab = logging.getLogger("a.b")
+    loggera.setLevel(logging.WARNING)
+    loggerab.setLevel(logging.WARNING)
+    logger.debug("root debug")
+    loggera.debug("a debug")
+    loggerab.debug("ab debug")
+    loggerab.error("ab error")
+    result = output.getvalue()
+    assert result == "DEBUG:root:root debug\nDEBUG:a:a debug\nDEBUG:a.b:ab debug\nERROR:a.b:ab error\n"
+    del logger
+    del loggera
+    del loggerab
+
