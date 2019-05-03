@@ -31,31 +31,7 @@ if a warning or error is logged are they emitted to the log.  The normal level
 controls what is stored and the threshold controls what causes the stored messages
 to be emitted.
 
-The defaults if you don't set them are to log everything (level=DEBUG) and emit
-when greater or equal to WARNING.
-
-You can also reset the saved log information, which might be useful when a handler
-starts, for example.  You can also set the maximum number of stored log items, to
-keep a long running program from using up all of memory.
-
-Pretty much all the documentation for the standard Python logging applies.  Beyond
-the addition of:
-  setMinLevel(level)
-  setMax(max)
-  reset()
-the only change in meaning is setMinLevel(level) affects what is stored, not what
-emitted.
-
-setMax() takes the maximum number of entries to store.  If the number is -1, all
-entries are stored (no maximum).
-
 To use, simply 'import pastlogging as logging' and log away!
-
-If you used to use 'import logging' and then 'logging.warning()' change to:
-'import pastlogging' and 'logging = getLogger()'.
-
-If you used 'import logging' and 'logger = logging.getLogger()' and 'logger.warning()'
-just change the import to 'import pastlogging as logging'.
 '''
 
 import os, sys, warnings, inspect
@@ -126,13 +102,27 @@ class PastLogger(Logger):
                 if not isinstance(exc_info, tuple):
                     exc_info = sys.exc_info()
             record = self.makeRecord(self.name, level, fn, lno, msg, args, exc_info, func, extra)
-        if level < self.threshold:
+        if level < self.getEffectiveThreshold():
             self.manager.addLogRecord(record)
         else:
             for rec in self.manager.getLogRecords():
                 self.handle(rec)
             self.manager.resetLogRecords()
             self.handle(record)
+
+    def getEffectiveThreshold(self):
+        """
+        Get the effective threshold for this logger.
+
+        Loop through this logger and its parents in the logger hierarchy,
+        looking for a non-zero logging threshold. Return the first one found.
+        """
+        logger = self
+        while logger:
+            if logger.threshold:
+                return logger.threshold
+            logger = logger.parent
+        return NOTSET
 
     def setLevel(self, level):
         """
@@ -255,18 +245,18 @@ def basicConfig(**kwargs):
                 fs = kwargs.pop("format", logging._STYLES [style][1])
                 fmt = Formatter(fs, dfs, style)
             else:
-                fs = kwargs.get("format", BASIC_FORMAT)
-                dfs = kwargs.get("datefmt", None)
+                fs = kwargs.pop("format", BASIC_FORMAT)
+                dfs = kwargs.pop("datefmt", None)
                 fmt = Formatter(fs, dfs)
             for h in handlers:
                 if h.formatter is None:
                     h.setFormatter(fmt)
                 logging.root.addHandler(h)
-            level = kwargs.get("level")
+            level = kwargs.pop("level", None)
             if level is not None:
                 logging.root.setLevel(level)
-            logging.root.setMinLevel(kwargs.get("minlevel", NOTSET))
-            logging.root.setMax(kwargs.get("max", 1000))
+            logging.root.setMinLevel(kwargs.pop("minlevel", NOTSET))
+            logging.root.setMax(kwargs.pop("max", 1000))
             if kwargs:
                 keys = ', '.join(kwargs.keys())
                 raise ValueError('Unrecognised argument(s): %s' % keys)
