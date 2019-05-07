@@ -4,7 +4,7 @@
 
 This module extends the built in logging module in Python.  It supports both Python 2.3 and greater and Python 3.X.
 
-The key benefit is to provide a mechanism where your logs are not cluttered with _info_ and _debug_ messages, but when an _warning_ or _error_ occurs, you get all the previous _info_ and _debug_ messages.  Because it is based on the standard logging module, all the usual flexibility in terms of handlers, filters, name spaces, etc. are available.
+The key benefit is to provide a mechanism where logs are not cluttered with _info_ and _debug_ messages, but when an _warning_ or _error_ occurs, you get all the previous _info_ and _debug_ messages.  Because it is based on the standard logging module, all the usual flexibility in terms of handlers, filters, name spaces, etc. are available.
 
 Please read the Python Standard Library documentation for logging to understand all the normal options and mechanisms for logging.
 
@@ -33,13 +33,13 @@ Resets the buffer holding messages.  This can be used when entering code where t
 
 # PastLogger Usage
 
-To minimize the changes to your code, you may
+To minimize the changes to existing code, you may
 
 ```
 import pastlogging as logging
 ```
 
-At that point, all your code using logging should work as expected.
+At that point, all code using logging should work as expected.
 
 Since the previous log messages are sent to the logs at the same time, the timestamp stored in the LogRecords themselves.  This can be configured using
 

@@ -38,6 +38,8 @@ import os, sys, warnings, inspect
 from logging import *
 import logging
 
+name = "pastlogging_pkg"
+
 class PastManager(logging.Manager):
     def __init__(self, rootnode):
         logging.Manager.__init__(self, rootnode)
