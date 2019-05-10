@@ -4,7 +4,7 @@
 
 This module extends the built in logging module in Python.  It supports both Python 2.3 and greater and Python 3.X.
 
-The key benefit is to provide a mechanism where logs are not cluttered with _info_ and _debug_ messages, but when an _warning_ or _error_ occurs, you get all the previous _info_ and _debug_ messages.  Because it is based on the standard logging module, all the usual flexibility in terms of handlers, filters, name spaces, etc. are available.
+The key benefit is to provide a mechanism where logs are not cluttered with _info_ and _debug_ messages, but when a _warning_ or _error_ occurs, you get all the previous _info_ and _debug_ messages.  Because it is based on the standard logging module, all the usual flexibility in terms of handlers, filters, name spaces, etc. are available.
 
 Please read the Python Standard Library documentation for logging to understand all the normal options and mechanisms for logging.
 
